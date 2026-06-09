@@ -1,0 +1,21 @@
+# Dipendenze
+frontend/node_modules/
+backend/node_modules/
+
+# Build e cache
+frontend/dist/
+.vite/
+
+# Env locali (non committare mai valori reali)
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.local
+
+# Claude Code
+.claude/
+

@@ -1,0 +1,39 @@
+services:
+  mongodb:
+    image: mongo:7
+    container_name: modametrics-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: modametrics_mock
+
+  backend:
+    build:
+      context: ./backend
+    container_name: modametrics-backend
+    restart: unless-stopped
+    ports:
+      - "8999:8999"
+    environment:
+      MONGO_URL: mongodb://mongodb:27017
+    depends_on:
+      - mongodb
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # L'URL deve essere raggiungibile dal browser (non dall'interno della rete Docker)
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8999}
+    container_name: modametrics-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  mongo_data:
