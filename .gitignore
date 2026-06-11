@@ -15,6 +15,7 @@ frontend/.env.*.local
 .DS_Store
 Thumbs.db
 *.local
+.vscode
 
 # Claude Code
 .claude/
