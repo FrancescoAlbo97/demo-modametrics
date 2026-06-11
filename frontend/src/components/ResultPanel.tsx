@@ -3,6 +3,7 @@ import remarkGfm from 'remark-gfm'
 import { Clock, Database, Coins, Video } from 'lucide-react'
 import type { PipelineResponse } from '../api/types'
 import DownloadButtons from './DownloadButtons'
+import InVideoButton from './InVideoButton'
 
 interface Props {
   response: PipelineResponse
@@ -47,11 +48,16 @@ export default function ResultPanel({ response }: Props) {
             <Video className="w-4 h-4 text-brand-500" />
             Prompt per la generazione video
           </div>
-          <pre className="bg-stone-50 border border-stone-200 rounded-lg p-4 text-sm text-stone-700 whitespace-pre-wrap font-mono leading-relaxed">
-            {response.result}
-          </pre>
+          <div className="prose prose-stone prose-sm max-w-none prose-headings:font-semibold prose-h1:text-xl prose-h2:text-lg prose-h3:text-base prose-a:text-brand-600 bg-stone-50 border border-stone-200 rounded-lg p-4">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {response.result}
+            </ReactMarkdown>
+          </div>
         </div>
       )}
+
+      {/* InVideo (only for video mode) */}
+      {!isReport && <InVideoButton pipelineId={response.pipeline_id} prompt={response.result} />}
 
       {/* Download */}
       <div className="pt-1">

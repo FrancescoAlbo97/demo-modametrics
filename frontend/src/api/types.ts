@@ -26,3 +26,14 @@ export interface PipelineResponse {
 export interface ErrorDetail {
   detail: string
 }
+
+export interface InVideoRequest {
+  vibe?: string
+  target_audience?: string
+  platform?: 'youtube' | 'instagram' | 'tiktok' | 'facebook'
+}
+
+export interface InVideoResponse {
+  invideo_url: string
+  platform: string
+}
