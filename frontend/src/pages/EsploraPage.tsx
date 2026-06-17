@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Grid3x3, List, Map as MapIcon, Search, AlertCircle, Loader2, Heart, MessageCircle } from 'lucide-react'
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
+import { MapContainer, TileLayer } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useAuth } from '../context/AuthContext'
 import { listPosts, listPoi, type PostListItem, type PoiItem } from '../api/explore'
+import ClusteredMarkers, { type ClusterPoint } from '../components/ClusteredMarkers'
 
 // Fix Leaflet default icon path (Vite non risolve gli asset di default)
 delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl
@@ -15,7 +16,7 @@ L.Icon.Default.mergeOptions({
 })
 
 type Tab = 'posts' | 'poi'
-type PostView = 'grid' | 'list'
+type PostView = 'grid' | 'list' | 'map'
 
 export default function EsploraPage() {
   const { token } = useAuth()
@@ -123,10 +124,23 @@ function PostsTab({ token }: { token: string }) {
           >
             <List className="w-4 h-4" />
           </button>
+          <button
+            onClick={() => setView('map')}
+            title="Mappa"
+            className={`p-1.5 rounded-md transition ${
+              view === 'map' ? 'bg-stone-100 text-stone-800' : 'text-stone-500 hover:text-stone-700'
+            }`}
+          >
+            <MapIcon className="w-4 h-4" />
+          </button>
         </div>
 
         <div className="text-xs text-stone-500">
-          {loading ? 'Caricamento…' : `${items.length} di ${total} post`}
+          {loading
+            ? 'Caricamento…'
+            : view === 'map'
+            ? `${items.filter((p) => p.latitude != null && p.longitude != null).length} di ${items.length} post geolocalizzati`
+            : `${items.length} di ${total} post`}
         </div>
       </div>
 
@@ -148,7 +162,67 @@ function PostsTab({ token }: { token: string }) {
         </div>
       )}
 
-      {view === 'grid' ? <PostGrid items={items} /> : <PostList items={items} />}
+      {view === 'grid' && <PostGrid items={items} />}
+      {view === 'list' && <PostList items={items} />}
+      {view === 'map' && <PostMap items={items} />}
+    </div>
+  )
+}
+
+function PostMap({ items }: { items: PostListItem[] }) {
+  const geoItems = items.filter(
+    (p): p is PostListItem & { latitude: number; longitude: number } =>
+      p.latitude != null && p.longitude != null,
+  )
+
+  const center = useMemo<[number, number]>(() => {
+    if (geoItems.length === 0) return [40.12, 9.01]
+    const avgLat = geoItems.reduce((s, p) => s + p.latitude, 0) / geoItems.length
+    const avgLng = geoItems.reduce((s, p) => s + p.longitude, 0) / geoItems.length
+    return [avgLat, avgLng]
+  }, [geoItems])
+
+  const points = useMemo<ClusterPoint[]>(
+    () =>
+      geoItems.map((p) => ({
+        id: p.post_id,
+        lat: p.latitude,
+        lng: p.longitude,
+        popup: (
+          <div className="text-xs space-y-1" style={{ minWidth: 180 }}>
+            {p.thumbnail_url && (
+              <img src={p.thumbnail_url} alt="" className="w-full h-24 object-cover rounded" />
+            )}
+            <div className="font-semibold">@{p.ownerUsername}</div>
+            {p.locationName && <div className="text-stone-500">{p.locationName}</div>}
+            <div className="text-stone-600 line-clamp-3">{p.caption ?? '—'}</div>
+            <div className="flex gap-2 text-stone-500">
+              <span className="flex items-center gap-1"><Heart className="w-3 h-3" /> {p.likesCount}</span>
+              <span className="flex items-center gap-1"><MessageCircle className="w-3 h-3" /> {p.commentsCount}</span>
+            </div>
+          </div>
+        ),
+      })),
+    [geoItems],
+  )
+
+  if (geoItems.length === 0) {
+    return (
+      <div className="bg-white border border-stone-200 rounded-xl p-8 text-center text-sm text-stone-500">
+        Nessun post con coordinate disponibili.
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-white border border-stone-200 rounded-xl overflow-hidden" style={{ height: 500 }}>
+      <MapContainer center={center} zoom={8} style={{ height: '100%', width: '100%' }} key={`${center[0]}-${center[1]}`}>
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        <ClusteredMarkers points={points} />
+      </MapContainer>
     </div>
   )
 }
@@ -242,6 +316,29 @@ function PoiTab({ token }: { token: string }) {
     return [avgLat, avgLng]
   }, [items])
 
+  const points = useMemo<ClusterPoint[]>(
+    () =>
+      items.map((p) => ({
+        id: p.poi_id,
+        lat: p.latitude,
+        lng: p.longitude,
+        popup: (
+          <div className="text-xs space-y-1">
+            <div className="font-semibold">{p.name}</div>
+            <div className="text-stone-500">{p.city ?? ''}{p.province ? ` (${p.province})` : ''}</div>
+            <div className="text-stone-500">
+              <span className="inline-block px-1.5 py-0.5 rounded bg-stone-100 mr-1">{p.segment}</span>
+              {p.category && <span>{p.category}</span>}
+            </div>
+            {p.sentiment_avg != null && (
+              <div className="text-stone-500">Sentiment: <strong>{p.sentiment_avg.toFixed(2)}</strong></div>
+            )}
+          </div>
+        ),
+      })),
+    [items],
+  )
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -292,23 +389,7 @@ function PoiTab({ token }: { token: string }) {
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
-            {items.map((p) => (
-              <Marker key={p.poi_id} position={[p.latitude, p.longitude]}>
-                <Popup>
-                  <div className="text-xs space-y-1">
-                    <div className="font-semibold">{p.name}</div>
-                    <div className="text-stone-500">{p.city ?? ''}{p.province ? ` (${p.province})` : ''}</div>
-                    <div className="text-stone-500">
-                      <span className="inline-block px-1.5 py-0.5 rounded bg-stone-100 mr-1">{p.segment}</span>
-                      {p.category && <span>{p.category}</span>}
-                    </div>
-                    {p.sentiment_avg != null && (
-                      <div className="text-stone-500">Sentiment: <strong>{p.sentiment_avg.toFixed(2)}</strong></div>
-                    )}
-                  </div>
-                </Popup>
-              </Marker>
-            ))}
+            <ClusteredMarkers points={points} />
           </MapContainer>
         </div>
       ) : (

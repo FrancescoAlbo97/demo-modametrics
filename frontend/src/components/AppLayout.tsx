@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 const TABS = [
   { to: '/analisi', label: 'Analisi' },
   { to: '/esplora', label: 'Esplora' },
+  { to: '/dashboard', label: 'Dashboard' },
   { to: '/ingest', label: 'Carica dati' },
 ]
 

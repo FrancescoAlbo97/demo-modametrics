@@ -6,6 +6,7 @@ import type { PipelineResponse } from '../api/types'
 import ModeToggle from '../components/ModeToggle'
 import LoadingSpinner from '../components/LoadingSpinner'
 import ResultPanel from '../components/ResultPanel'
+import PipelineDashboardSection from '../components/PipelineDashboardSection'
 
 export default function AnalisiPage() {
   const { token } = useAuth()
@@ -124,12 +125,21 @@ export default function AnalisiPage() {
       )}
 
       {result && !loading && (
-        <div className="bg-white rounded-xl border border-stone-200 shadow-sm p-6">
-          <h2 className="text-base font-semibold text-stone-800 mb-4">
-            Risultato · {result.mode === 'report' ? 'Report' : 'Prompt Video'}
-          </h2>
-          <ResultPanel response={result} />
-        </div>
+        <>
+          <div className="bg-white rounded-xl border border-stone-200 shadow-sm p-6">
+            <h2 className="text-base font-semibold text-stone-800 mb-4">
+              Risultato · {result.mode === 'report' ? 'Report' : 'Prompt Video'}
+            </h2>
+            <ResultPanel response={result} />
+          </div>
+          {token && (
+            <PipelineDashboardSection
+              pipelineId={result.pipeline_id}
+              collection={result.mongo_query?.collection}
+              token={token}
+            />
+          )}
+        </>
       )}
     </div>
   )

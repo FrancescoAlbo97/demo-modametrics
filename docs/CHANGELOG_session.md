@@ -111,3 +111,32 @@ Nuova sezione `/esplora` con 2 sotto-tab:
 Aggiunge i due documenti:
 - `docs/proposed_explore_endpoints.md` — spec dettagliata di `GET /api/posts`, `GET /api/poi` e nota sull'URL fittizio dell'InVideo mock.
 - `docs/CHANGELOG_session.md` — questo file.
+
+---
+
+## Commit 9 — `feat(dashboard): allineamento allo swagger aggiornato + sezione Dashboard`
+
+Lo swagger del gateway è stato aggiornato (`docs/swagger_api_gateway_updated_dashboard.json`) introducendo quattro endpoint di analytics aggregate. Questa versione adegua frontend e mock di conseguenza.
+
+**Nuovi endpoint coperti:**
+
+| Endpoint | Scopo |
+|----------|-------|
+| `GET /api/dashboard/social` | KPI/aggregati social globali (filtri `collection`, `from_date`, `to_date`) |
+| `GET /api/dashboard/poi` | KPI/aggregati POI globali (filtro `segment`) |
+| `GET /api/pipeline/{id}/dashboard/social` | gli stessi aggregati ristretti ai dati di una singola pipeline |
+| `GET /api/pipeline/{id}/dashboard/poi` | idem per i POI |
+
+**Frontend** — nuovo client `api/dashboard.ts` con i tipi di risposta allineati allo schema swagger (`SocialDashboardResponse`: kpis, timeline, top hashtag/account/location, post types, contenuto visual, by-PAT; `PoiDashboardResponse`: kpis, distribuzioni per segmento/categoria/città/industry/stelle/price-class/sentiment e i trend prezzo/occupazione/popolarità/sentiment). Aggiunta una sezione **Dashboard** (`/dashboard`) con tab Social/POI e relativi filtri, più una **dashboard contestuale** mostrata sotto il risultato in Analisi: legge la `collection` della pipeline e sceglie la vista giusta (`instagram_posts`/`pat_posts` → social, `poi_data` → poi; altre collection → nascosta). Nav e routing aggiornati con la nuova tab.
+
+Allineato anche `PostListItem` ai campi aggiunti dallo swagger (`image_count`, `locationId`).
+
+**Backend mock** — `backend/server.js` implementa i quattro endpoint restituendo payload plausibili e coerenti con gli schema; le varianti per-pipeline recuperano il run da Mongo per derivare la `collection`.
+
+**Note per il team backend:** la forma delle risposte è quella ipotizzata dallo swagger aggiornato; eventuali scostamenti rispetto all'implementazione reale vanno riconciliati lato tipi in `api/dashboard.ts`.
+
+---
+
+## Commit 10 — `feat(esplora): clustering dei marker sulla mappa`
+
+Sulle mappe di `/esplora` i punti vicini vengono ora raggruppati in un unico indicatore con il conteggio (come nei portali immobiliari), espandibile con zoom/click. Realizzato con il plugin `leaflet.markercluster` agganciato via `useMap`, scelto al posto di `react-leaflet-cluster` per evitare conflitti di peer-dependency con `react-leaflet@5` + React 19; i popup esistenti restano invariati.

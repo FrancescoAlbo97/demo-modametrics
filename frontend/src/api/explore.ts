@@ -10,9 +10,11 @@ export interface PostListItem {
   type?: string
   hashtags?: string[]
   thumbnail_url?: string
+  image_count?: number
   latitude?: number | null
   longitude?: number | null
   locationName?: string | null
+  locationId?: string | null
 }
 
 export interface PostListResponse {

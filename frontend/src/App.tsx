@@ -5,6 +5,7 @@ import AppLayout from './components/AppLayout'
 import AnalisiPage from './pages/AnalisiPage'
 import EsploraPage from './pages/EsploraPage'
 import IngestPage from './pages/IngestPage'
+import DashboardPage from './pages/DashboardPage'
 
 function AppRoutes() {
   const { token } = useAuth()
@@ -23,6 +24,7 @@ function AppRoutes() {
         <Route index element={<Navigate to="/analisi" replace />} />
         <Route path="/analisi" element={<AnalisiPage />} />
         <Route path="/esplora" element={<EsploraPage />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/ingest" element={<IngestPage />} />
         <Route path="*" element={<Navigate to="/analisi" replace />} />
       </Route>

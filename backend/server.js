@@ -34,15 +34,21 @@ function requireBearer(req, res, next) {
   }
   const token = auth.slice(7)
   const session = activeTokens.get(token)
-  if (!session) {
-    return res.status(401).json({ detail: 'Token non valido o scaduto' })
+  if (session) {
+    if (Date.now() > session.expiresAt) {
+      activeTokens.delete(token)
+      return res.status(401).json({ detail: 'Token scaduto' })
+    }
+    req.user = session.username
+    return next()
   }
-  if (Date.now() > session.expiresAt) {
-    activeTokens.delete(token)
-    return res.status(401).json({ detail: 'Token scaduto' })
+  // Fallback dev: il token store è in RAM e `node --watch` lo svuota ad ogni
+  // riavvio. Accettiamo i token mock per forma così sopravvivono ai restart.
+  if (token.startsWith('mock-jwt-')) {
+    req.user = 'demo'
+    return next()
   }
-  req.user = session.username
-  next()
+  return res.status(401).json({ detail: 'Token non valido o scaduto' })
 }
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
@@ -352,6 +358,238 @@ app.get('/api/poi', requireBearer, (req, res) => {
     items = items.filter((p) => p.segment === segment)
   }
   res.json({ items, total: items.length })
+})
+
+// ─── Dashboard mocks ──────────────────────────────────────────────────────────
+
+function buildSocialDashboard(collection, opts = {}) {
+  const isPat = collection === 'pat_posts'
+  const totalPosts = isPat ? 38 : 142
+  const totalLikes = isPat ? 4820 : 18450
+  const totalComments = isPat ? 392 : 1284
+  return {
+    collection,
+    no_data: false,
+    kpis: {
+      total_posts: totalPosts,
+      total_likes: totalLikes,
+      total_comments: totalComments,
+      avg_likes: Math.round(totalLikes / totalPosts),
+      avg_comments: Math.round(totalComments / totalPosts),
+      max_likes: isPat ? 612 : 1243,
+      max_comments: isPat ? 41 : 87,
+      unique_accounts: isPat ? 8 : 17,
+      unique_locations: isPat ? 4 : 9,
+    },
+    timeline: Array.from({ length: 14 }, (_, i) => {
+      const d = new Date('2026-05-01T00:00:00Z')
+      d.setUTCDate(d.getUTCDate() + i * 2)
+      return {
+        date: d.toISOString().slice(0, 10),
+        posts: Math.round(totalPosts / 14 + Math.sin(i) * 3),
+        likes: Math.round(totalLikes / 14 + Math.sin(i * 1.3) * 200),
+        comments: Math.round(totalComments / 14 + Math.cos(i) * 20),
+      }
+    }),
+    top_hashtags: [
+      { hashtag: 'sardegna', count: 38 },
+      { hashtag: 'costasmeralda', count: 31 },
+      { hashtag: 'luxurytravel', count: 28 },
+      { hashtag: 'portocervo', count: 22 },
+      { hashtag: 'sardinialife', count: 19 },
+      { hashtag: 'visitsardinia', count: 14 },
+    ],
+    top_accounts: [
+      { username: 'sardinia_luxury', posts: 12, total_likes: 5240, total_comments: 312 },
+      { username: 'costa_smeralda_life', posts: 9, total_likes: 4012, total_comments: 248 },
+      { username: 'luxury_car_division', posts: 8, total_likes: 3120, total_comments: 187 },
+      { username: 'arzachena_estates', posts: 7, total_likes: 2480, total_comments: 165 },
+      { username: 'porto_cervo_official', posts: 6, total_likes: 2210, total_comments: 142 },
+    ],
+    top_locations: [
+      { location: 'Porto Cervo', count: 28 },
+      { location: 'Costa Smeralda', count: 22 },
+      { location: 'Cagliari', count: 18 },
+      { location: 'Alghero', count: 14 },
+      { location: 'Olbia', count: 12 },
+    ],
+    post_types: [
+      { type: 'Sidecar', count: Math.round(totalPosts * 0.42) },
+      { type: 'Reel', count: Math.round(totalPosts * 0.28) },
+      { type: 'GraphImage', count: Math.round(totalPosts * 0.30) },
+    ],
+    visual_content: [
+      { label: 'beach', image_count: 48 },
+      { label: 'luxury_hotel', image_count: 36 },
+      { label: 'yacht', image_count: 22 },
+      { label: 'sports_car', image_count: 18 },
+      { label: 'food', image_count: 14 },
+      { label: 'landscape', image_count: 12 },
+    ],
+    by_pat: isPat
+      ? [
+          { pat_name: 'Pat Costa Smeralda', count: 14, total_likes: 1820 },
+          { pat_name: 'Pat Cagliari Centro', count: 12, total_likes: 1542 },
+          { pat_name: 'Pat Alghero Bay', count: 8, total_likes: 920 },
+          { pat_name: 'Pat Ogliastra', count: 4, total_likes: 538 },
+        ]
+      : [],
+    _filter: opts,
+  }
+}
+
+function buildPoiDashboard(segment) {
+  const filtered = segment
+    ? MOCK_POI.filter((p) => p.segment === segment)
+    : MOCK_POI
+  const sentiments = filtered.map((p) => p.sentiment_avg).filter((s) => s != null)
+  const avgSent = sentiments.reduce((a, b) => a + b, 0) / (sentiments.length || 1)
+  const minSent = sentiments.length ? Math.min(...sentiments) : 0
+  const maxSent = sentiments.length ? Math.max(...sentiments) : 0
+
+  const bySegment = ['luxury', 'traditional'].map((seg) => {
+    const subset = filtered.filter((p) => p.segment === seg)
+    const subSent = subset.map((p) => p.sentiment_avg).filter((s) => s != null)
+    return {
+      segment: seg,
+      count: subset.length,
+      avg_sentiment: subSent.length ? subSent.reduce((a, b) => a + b, 0) / subSent.length : 0,
+      avg_stars: seg === 'luxury' ? 4.6 : 3.1,
+      avg_price_class: seg === 'luxury' ? 4.2 : 2.3,
+    }
+  })
+
+  const categoryMap = {}
+  for (const p of filtered) {
+    if (!p.category) continue
+    if (!categoryMap[p.category]) categoryMap[p.category] = { count: 0, sent: [] }
+    categoryMap[p.category].count++
+    if (p.sentiment_avg != null) categoryMap[p.category].sent.push(p.sentiment_avg)
+  }
+  const byCategory = Object.entries(categoryMap).map(([category, v]) => ({
+    category,
+    count: v.count,
+    avg_sentiment: v.sent.length ? v.sent.reduce((a, b) => a + b, 0) / v.sent.length : 0,
+  }))
+
+  const cityMap = {}
+  for (const p of filtered) {
+    if (!p.city) continue
+    if (!cityMap[p.city]) cityMap[p.city] = { count: 0, sent: [] }
+    cityMap[p.city].count++
+    if (p.sentiment_avg != null) cityMap[p.city].sent.push(p.sentiment_avg)
+  }
+  const byCity = Object.entries(cityMap).map(([city, v]) => ({
+    city,
+    count: v.count,
+    avg_sentiment: v.sent.length ? v.sent.reduce((a, b) => a + b, 0) / v.sent.length : 0,
+  }))
+
+  const trendDates = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date('2026-05-01T00:00:00Z')
+    d.setUTCDate(d.getUTCDate() + i * 3)
+    return d.toISOString().slice(0, 10)
+  })
+
+  return {
+    collection: 'poi_data',
+    no_data: filtered.length === 0,
+    kpis: {
+      total_poi: filtered.length,
+      avg_sentiment: avgSent,
+      min_sentiment: minSent,
+      max_sentiment: maxSent,
+      avg_stars: segment === 'traditional' ? 3.1 : 4.2,
+      avg_rooms: segment === 'traditional' ? 18 : 86,
+      avg_price_class: segment === 'traditional' ? 2.3 : 4.0,
+    },
+    by_segment: bySegment,
+    by_category: byCategory,
+    by_city: byCity,
+    by_industry: [
+      { industry: 'Hospitality', count: filtered.filter((p) => /Hotel|Resort|B&B|Boutique|Agriturismo/.test(p.category || '')).length },
+      { industry: 'Food & Beverage', count: filtered.filter((p) => /Ristorante|Pizzeria|Trattoria/.test(p.category || '')).length },
+    ],
+    stars_distribution: [
+      { stars: 3, count: filtered.filter((p) => p.segment === 'traditional').length },
+      { stars: 4, count: Math.round(filtered.length * 0.2) },
+      { stars: 5, count: filtered.filter((p) => p.segment === 'luxury').length },
+    ],
+    price_class_distribution: [
+      { price_class: 1, count: 1 },
+      { price_class: 2, count: 3 },
+      { price_class: 3, count: 4 },
+      { price_class: 4, count: filtered.filter((p) => p.segment === 'luxury').length },
+    ],
+    sentiment_distribution: [
+      { range: '0.0–0.2', count: 0 },
+      { range: '0.2–0.4', count: 0 },
+      { range: '0.4–0.6', count: filtered.filter((p) => p.sentiment_avg != null && p.sentiment_avg < 0.7).length },
+      { range: '0.6–0.8', count: filtered.filter((p) => p.sentiment_avg != null && p.sentiment_avg >= 0.7 && p.sentiment_avg < 0.8).length },
+      { range: '0.8–1.0', count: filtered.filter((p) => p.sentiment_avg != null && p.sentiment_avg >= 0.8).length },
+    ],
+    price_trend: trendDates.map((date, i) => ({
+      date,
+      avg_median_price: Math.round(180 + Math.sin(i / 2) * 40 + (segment === 'luxury' ? 200 : 0)),
+      avg_min_price: Math.round(120 + Math.sin(i / 2) * 30 + (segment === 'luxury' ? 150 : 0)),
+      avg_max_price: Math.round(260 + Math.sin(i / 2) * 60 + (segment === 'luxury' ? 300 : 0)),
+      total_offers: 40 + (i % 5) * 3,
+    })),
+    occupancy_trend: trendDates.map((date, i) => ({
+      date,
+      avg_occupancy_rate: 0.55 + Math.sin(i / 3) * 0.15,
+    })),
+    popularity_trend: trendDates.map((date, i) => ({
+      date,
+      avg_popularity: 0.6 + Math.cos(i / 4) * 0.18,
+    })),
+    sentiment_trend: trendDates.map((date, i) => ({
+      date,
+      avg_sentiment: 0.7 + Math.sin(i / 3) * 0.1,
+      total_reviews: 80 + i * 6,
+    })),
+  }
+}
+
+app.get('/api/dashboard/social', requireBearer, (req, res) => {
+  const collection = req.query.collection || 'instagram_posts'
+  if (collection !== 'instagram_posts' && collection !== 'pat_posts') {
+    return res.status(422).json({ detail: "collection deve essere 'instagram_posts' o 'pat_posts'" })
+  }
+  res.json(buildSocialDashboard(collection, { from_date: req.query.from_date, to_date: req.query.to_date }))
+})
+
+app.get('/api/dashboard/poi', requireBearer, (req, res) => {
+  const segment = req.query.segment
+  if (segment && segment !== 'luxury' && segment !== 'traditional') {
+    return res.status(422).json({ detail: "segment deve essere 'luxury' o 'traditional'" })
+  }
+  res.json(buildPoiDashboard(segment || null))
+})
+
+app.get('/api/pipeline/:pipeline_id/dashboard/social', requireBearer, async (req, res) => {
+  let collection = 'instagram_posts'
+  if (db) {
+    const doc = await db.collection('pipeline_runs').findOne({ pipeline_id: req.params.pipeline_id })
+    if (!doc) return res.status(404).json({ detail: 'Pipeline ID non trovato' })
+    collection = doc.mongo_query?.collection || 'instagram_posts'
+    if (collection !== 'instagram_posts' && collection !== 'pat_posts') {
+      return res.status(422).json({ detail: `La pipeline opera sulla collection '${collection}', non supportata per la dashboard social.` })
+    }
+  }
+  res.json(buildSocialDashboard(collection))
+})
+
+app.get('/api/pipeline/:pipeline_id/dashboard/poi', requireBearer, async (req, res) => {
+  if (db) {
+    const doc = await db.collection('pipeline_runs').findOne({ pipeline_id: req.params.pipeline_id })
+    if (!doc) return res.status(404).json({ detail: 'Pipeline ID non trovato' })
+    const collection = doc.mongo_query?.collection
+    if (collection !== 'poi_data') {
+      return res.status(422).json({ detail: `La pipeline opera sulla collection '${collection}', non supportata per la dashboard POI.` })
+    }
+  }
+  res.json(buildPoiDashboard(null))
 })
 
 // ─── Start ────────────────────────────────────────────────────────────────────
